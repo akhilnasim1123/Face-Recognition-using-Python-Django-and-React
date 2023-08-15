@@ -1,0 +1,24 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Compile C++",
+            "type": "shell",
+            "command": "g++",  // Use the appropriate C++ compiler command (e.g., g++ or clang++)
+            "args": [
+                "-std=c++11",
+                "-Wall",
+                "-IC:\\Users\\akhil\\AppData\\Local\\Programs\\Python\\Python310\\lib\\site-packages\\dlib",
+                "-c",
+                "${file}",  // Compiles the currently open C++ file
+                "-o",
+                "${fileDirname}/${fileBasenameNoExtension}.o"  // Output object file in the same directory
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": "$gcc"
+        }
+    ]
+}

@@ -1,0 +1,26 @@
+.user-registration {
+    text-align: center;
+    padding: 20px;
+  }
+  
+  .registration-form {
+    margin-top: 20px;
+  }
+  
+  .registration-form input {
+    margin: 10px;
+    padding: 5px;
+  }
+  
+  .register-button {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    cursor: pointer;
+  }
+  
+  .register-button:hover {
+    background-color: #0056b3;
+  }
+  
