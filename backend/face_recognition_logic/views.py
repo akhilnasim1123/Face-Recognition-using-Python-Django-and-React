@@ -11,35 +11,60 @@ from PIL import Image
 import io
 from .serializers import *
 
+import base64
+
+def decode_padded_base64(s):
+    try:
+        s = s.rstrip('=')
+        padding = '=' * (4 - len(s) % 4)
+        padded_s = s + padding
+
+        decoded_data = np.frombuffer(base64.b64decode(padded_s), dtype=np.float64)
+        return decoded_data
+    except Exception as e:
+        print("Error decoding base64:", e)
+        return np.array([])
+
+
+
 class MarkAttendance(APIView):
     def post(self, request):
         image_data = request.data.get('image')
         if not image_data:
             return Response({'error': 'Image Data is Required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        image_data_decoded = base64.b64decode(image_data.split(',')[1])
+        try:
+            image_data_decoded = base64.b64decode(image_data.split(',')[1])
+            if image_data_decoded is None:
+                return Response({'error': 'Invalid base64 image data.'}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({'error': 'Error decoding base64 image data.'}, status=status.HTTP_400_BAD_REQUEST)
 
         image = Image.open(io.BytesIO(image_data_decoded))
-
-        face_encodings = face_recognition.face_encodings(np.array(image))
+        image.format = 'JPEG'
+        face_encodings = face_recognition.face_encodings(np.array(image.convert('RGB')))
         if len(face_encodings) == 0:
             return Response({'error': 'No face found in the image.'}, status=status.HTTP_400_BAD_REQUEST)
-        student_face_encoding = face_encodings[0] 
+        student_face_encoding = face_encodings[0]
 
         students = Student.objects.exclude(face_encoding__isnull=True)
 
-        for student in students:
-            try:
-                decoded_face_encoding = base64.b64decode(student.face_encoding.encode())
-                print("Decoded face encoding:", decoded_face_encoding)
-            except Exception as e:
-                print("Error decoding face encoding for student:", student.id, e)
+        student_face_encodings_np = [decode_padded_base64(s.face_encoding) for s in students if s.face_encoding]
+        
+        print("Debug: Number of students:", len(students))
+        print("Debug: Decoded student face encodings:", student_face_encodings_np)
+        
+        if not student_face_encodings_np:
+            return Response({'error': 'No valid face encodings found for students.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        student_face_encodings_np = [np.frombuffer(base64.b64decode(s.face_encoding.encode()), dtype=np.float64) for s in students]
+        face_distances = face_recognition.face_distance(student_face_encodings_np, student_face_encoding)
+        print("Debug: Face distances:", face_distances)
 
-        matches = face_recognition.compare_faces(student_face_encodings_np, student_face_encoding)
-        if True in matches:
-            matched_student = students[matches.index(True)]
+        min_distance = min(face_distances)
+        min_distance_index = np.argmin(face_distances)
+
+        if min_distance <= 0.5:
+            matched_student = students[min_distance_index]
             today = timezone.now().date()
             existing_attendance = Attendance.objects.filter(student=matched_student, date=today).first()
 
@@ -53,13 +78,13 @@ class MarkAttendance(APIView):
             else:
                 new_attendance = Attendance(student=matched_student, date=today, check_in_time=timezone.now())
                 new_attendance.save()
-
-                matched_student.face_encoding = student_face_encoding.tostring()
+                matched_student.face_encoding = base64.b64encode(student_face_encoding.tobytes()).decode()
                 matched_student.save()
 
                 return Response({'message': 'Check-in marked successfully.'}, status=status.HTTP_200_OK)
         else:
             return Response({'message': 'No matching student found.'}, status=status.HTTP_404_NOT_FOUND)
+
 
 
 class CheckOut(APIView):
@@ -76,7 +101,13 @@ class CheckOut(APIView):
             return Response({'error': 'No face found in the image.'}, status=status.HTTP_400_BAD_REQUEST)
         
         students = Student.objects.all()
-        matches = face_recognition.compare_faces([np.fromstring(s.face_encoding) for s in students], student_face_encoding)
+        student_face_encodings = [np.fromstring(base64.b64decode(s.face_encoding), dtype=np.float64) for s in students]
+
+        print("Debug: Number of students:", len(students))
+        print("Debug: Decoded student face encodings:", student_face_encodings)
+
+        matches = face_recognition.compare_faces(student_face_encodings, student_face_encoding)
+        print("Debug: Matches:", matches)
         
         if True in matches:
             matched_student = students[matches.index(True)]
@@ -86,7 +117,6 @@ class CheckOut(APIView):
                 if existing_attendance.check_out_time:
                     return Response({'message': 'Already checked out.'}, status=status.HTTP_200_OK)
                 else:
-                    # Mark check-out time
                     existing_attendance.check_out_time = timezone.now()
                     existing_attendance.save()
                     return Response({'message': 'Check-out marked successfully.'}, status=status.HTTP_200_OK)
@@ -94,6 +124,7 @@ class CheckOut(APIView):
                 return Response({'message': 'Attendance not marked yet. Mark attendance first.'}, status=status.HTTP_400_BAD_REQUEST)
         else:
             return Response({'message': 'No matching student found.'}, status=status.HTTP_404_NOT_FOUND)
+
 class StudentList(APIView):
     def get(self, request):
         students = Student.objects.all()

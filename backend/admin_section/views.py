@@ -53,17 +53,16 @@ def approve_registration_request(request, request_id):
     print("Debug: Registration request approved. Request ID:", request_id)
     print("Debug: Registration request face_encoding:", registration_request.face_encoding)
 
-
     student_data = {
         'name': registration_request.name,
-        'face_encoding': registration_request.face_encoding
+        'face_encoding': registration_request.face_encoding  # Assuming it's already a string
     }
 
     serializer = StudentSerializer(data=student_data)
     if serializer.is_valid():
         serializer.save()
         print("Debug: Student data saved successfully.")
-        registration_request.delete() 
+        registration_request.delete()
         return Response({'message': 'Registration request approved.'}, status=status.HTTP_200_OK)
     else:
         print("Debug: Student data validation failed:", serializer.errors)
