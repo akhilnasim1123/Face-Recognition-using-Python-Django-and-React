@@ -43,16 +43,17 @@ class MarkAttendance(APIView):
         
         students = Student.objects.exclude(face_encoding__isnull=True)
 
-        student_face_encodings_np = [decode_padded_base64(s.face_encoding) for s in students if s.face_encoding]
+        student_face_encodings_db = [s.face_encoding for s in students]
+        student_face_encodings = [decode_padded_base64(encoding) for encoding in student_face_encodings_db]
 
         # Remove face encodings with inconsistent shapes
-        student_face_encodings_np = [enc for enc in student_face_encodings_np if len(enc) == len(student_face_encoding)]
+        student_face_encodings = [enc for enc in student_face_encodings if len(enc) == len(student_face_encoding)]
 
         print("Debug: Number of students:", len(students))
-        print("Debug: Decoded student face encodings:", student_face_encodings_np)
+        print("Debug: Decoded student face encodings:", student_face_encodings)
         
         # Perform face recognition
-        matches = face_recognition.compare_faces(student_face_encodings_np, student_face_encoding)
+        matches = face_recognition.compare_faces(student_face_encodings, student_face_encoding)
 
         if True in matches:
             matched_student = students[matches.index(True)]
@@ -67,18 +68,19 @@ class MarkAttendance(APIView):
                 else:
                     existing_attendance.check_in_time = timezone.now()
                     existing_attendance.save()
-                    return Response({'message': 'Check-in marked successfully.'}, status=status.HTTP_200_OK)
+                    return Response({'message': 'Check-in marked successfully.', 'student_id': matched_student.id, 'student_name': matched_student.name}, status=status.HTTP_200_OK)
             else:
                 new_attendance = Attendance(student=matched_student, check_in_time=timezone.now())
                 new_attendance.save()
 
                 # Update the face encoding for the matched student
-                matched_student.face_encoding = student_face_encoding.tostring()
+                matched_student.face_encoding = base64.b64encode(student_face_encoding.tobytes()).decode()
                 matched_student.save()
 
-                return Response({'message': 'Check-in marked successfully.'}, status=status.HTTP_200_OK)
+                return Response({'message': 'Check-in marked successfully.', 'student_id': matched_student.id, 'student_name': matched_student.name}, status=status.HTTP_200_OK)
         else:
             return Response({'message': 'No matching student found.'}, status=status.HTTP_404_NOT_FOUND)
+
 
 class CheckOut(APIView):
     def post(self, request):
