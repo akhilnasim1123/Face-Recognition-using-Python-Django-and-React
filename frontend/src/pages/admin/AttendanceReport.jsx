@@ -29,9 +29,7 @@ function AttendanceReport() {
       <table>
         <thead>
           <tr>
-            <th>Date</th>
-            <th>Student ID</th>
-            <th>Student Name</th>
+            <th>Student id</th>
             <th>Check-in Time</th>
             <th>Check-out Time</th>
           </tr>
@@ -39,9 +37,7 @@ function AttendanceReport() {
         <tbody>
           {attendanceData.map((attendance) => (
             <tr key={attendance.id} className={isLateCheckIn(attendance.check_in_time) ? 'late-check-in' : ''}>
-              <td>{attendance.date}</td>
-              <td>{attendance.student_id}</td>
-              <td>{attendance.student_name}</td>
+              <td>{attendance.student}</td>
               <td>{attendance.check_in_time}</td>
               <td>{attendance.check_out_time || 'N/A'}</td>
             </tr>

@@ -11,7 +11,7 @@ import base64
 from PIL import Image
 import io
 from .serializers import *
-
+from datetime import datetime
 import base64
 
 def decode_padded_base64(s):
@@ -58,10 +58,11 @@ class MarkAttendance(APIView):
         if True in matches:
             matched_student = students[matches.index(True)]
             today = timezone.now()
+            current_date = datetime.now().date()
 
-            # Filter existing attendance based on check_in_time or check_out_time
             existing_attendance = Attendance.objects.filter(student=matched_student, check_in_time__date=today).first()
-
+            student_name_of = Student.objects.get(name=matched_student)
+            print(student_name_of.name)
             if existing_attendance:
                 if existing_attendance.check_in_time:
                     return Response({'message': 'Already checked in.'}, status=status.HTTP_200_OK)
@@ -70,10 +71,10 @@ class MarkAttendance(APIView):
                     existing_attendance.save()
                     return Response({'message': 'Check-in marked successfully.', 'student_id': matched_student.id, 'student_name': matched_student.name}, status=status.HTTP_200_OK)
             else:
-                new_attendance = Attendance(student=matched_student, check_in_time=timezone.now())
+
+                new_attendance = Attendance(student=matched_student,student_name = student_name_of.name, check_in_time=timezone.now())
                 new_attendance.save()
 
-                # Update the face encoding for the matched student
                 matched_student.face_encoding = base64.b64encode(student_face_encoding.tobytes()).decode()
                 matched_student.save()
 
@@ -97,9 +98,8 @@ class CheckOut(APIView):
         
         students = Student.objects.exclude(face_encoding__isnull=True)
 
-        # Convert valid face encodings to numpy arrays for comparison
         student_face_encodings_np = [decode_padded_base64(s.face_encoding) for s in students if s.face_encoding]
-        student_face_encodings_np = [enc for enc in student_face_encodings_np if len(enc) == 128]  # Ensure all encodings have the same shape
+        student_face_encodings_np = [enc for enc in student_face_encodings_np if len(enc) == 128] 
 
         print("Debug: Number of students:", len(students))
         print("Debug: Decoded student face encodings:", student_face_encodings_np)
