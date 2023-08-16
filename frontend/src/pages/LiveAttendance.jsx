@@ -40,11 +40,11 @@ function LiveAttendance() {
       console.log(imageData);
 
       await axios.post('http://127.0.0.1:8000/api/mark-attendance/', { image: imageData }).then(result=>{
-        console.log(result);
+        console.log(result.data.message);
         Swal.fire({
           icon: 'success',
           title: 'Marked!',
-          text: 'Your Attendance Marked successfully!',
+          text: result.data.message,
         })
       });
 

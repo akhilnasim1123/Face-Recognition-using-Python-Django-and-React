@@ -22,13 +22,14 @@ class RegistrationRequestView(APIView):
         if face_encoding is None:
             return Response({'error': 'No face found in the image.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        face_encoding_text = ','.join(map(str, face_encoding.tolist()))
+        # Save the face encoding as a string
+        face_encoding_text = face_encoding
 
+        # Create a new registration request instance
         request_instance = RegistrationRequest(name=name, face_encoding=face_encoding_text)
         request_instance.save()
 
         return Response({'message': 'Registration request sent successfully.'}, status=status.HTTP_201_CREATED)
-
 
     def get(self, request):
         requests = RegistrationRequest.objects.all()
@@ -52,4 +53,3 @@ def encode_face(image_data):
         return face_encoding_base64
     except IndexError:
         return None
-

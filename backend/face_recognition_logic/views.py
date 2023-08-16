@@ -1,3 +1,4 @@
+import binascii
 from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -32,41 +33,33 @@ class MarkAttendance(APIView):
         image_data = request.data.get('image')
         if not image_data:
             return Response({'error': 'Image Data is Required'}, status=status.HTTP_400_BAD_REQUEST)
-
+        
         try:
             image_data_decoded = base64.b64decode(image_data.split(',')[1])
-            if image_data_decoded is None:
-                return Response({'error': 'Invalid base64 image data.'}, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            return Response({'error': 'Error decoding base64 image data.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        image = Image.open(io.BytesIO(image_data_decoded))
-        image.format = 'JPEG'
-        face_encodings = face_recognition.face_encodings(np.array(image.convert('RGB')))
-        if len(face_encodings) == 0:
+            image = Image.open(io.BytesIO(image_data_decoded))
+            student_face_encoding = face_recognition.face_encodings(np.array(image))[0]
+        except IndexError:
             return Response({'error': 'No face found in the image.'}, status=status.HTTP_400_BAD_REQUEST)
-        student_face_encoding = face_encodings[0]
-
+        
         students = Student.objects.exclude(face_encoding__isnull=True)
 
         student_face_encodings_np = [decode_padded_base64(s.face_encoding) for s in students if s.face_encoding]
-        
+
+        # Remove face encodings with inconsistent shapes
+        student_face_encodings_np = [enc for enc in student_face_encodings_np if len(enc) == len(student_face_encoding)]
+
         print("Debug: Number of students:", len(students))
         print("Debug: Decoded student face encodings:", student_face_encodings_np)
         
-        if not student_face_encodings_np:
-            return Response({'error': 'No valid face encodings found for students.'}, status=status.HTTP_400_BAD_REQUEST)
+        # Perform face recognition
+        matches = face_recognition.compare_faces(student_face_encodings_np, student_face_encoding)
 
-        face_distances = face_recognition.face_distance(student_face_encodings_np, student_face_encoding)
-        print("Debug: Face distances:", face_distances)
+        if True in matches:
+            matched_student = students[matches.index(True)]
+            today = timezone.now()
 
-        min_distance = min(face_distances)
-        min_distance_index = np.argmin(face_distances)
-
-        if min_distance <= 0.5:
-            matched_student = students[min_distance_index]
-            today = timezone.now().date()
-            existing_attendance = Attendance.objects.filter(student=matched_student, date=today).first()
+            # Filter existing attendance based on check_in_time or check_out_time
+            existing_attendance = Attendance.objects.filter(student=matched_student, check_in_time__date=today).first()
 
             if existing_attendance:
                 if existing_attendance.check_in_time:
@@ -76,16 +69,16 @@ class MarkAttendance(APIView):
                     existing_attendance.save()
                     return Response({'message': 'Check-in marked successfully.'}, status=status.HTTP_200_OK)
             else:
-                new_attendance = Attendance(student=matched_student, date=today, check_in_time=timezone.now())
+                new_attendance = Attendance(student=matched_student, check_in_time=timezone.now())
                 new_attendance.save()
-                matched_student.face_encoding = base64.b64encode(student_face_encoding.tobytes()).decode()
+
+                # Update the face encoding for the matched student
+                matched_student.face_encoding = student_face_encoding.tostring()
                 matched_student.save()
 
                 return Response({'message': 'Check-in marked successfully.'}, status=status.HTTP_200_OK)
         else:
             return Response({'message': 'No matching student found.'}, status=status.HTTP_404_NOT_FOUND)
-
-
 
 class CheckOut(APIView):
     def post(self, request):
@@ -100,13 +93,16 @@ class CheckOut(APIView):
         except IndexError:
             return Response({'error': 'No face found in the image.'}, status=status.HTTP_400_BAD_REQUEST)
         
-        students = Student.objects.all()
-        student_face_encodings = [np.fromstring(base64.b64decode(s.face_encoding), dtype=np.float64) for s in students]
+        students = Student.objects.exclude(face_encoding__isnull=True)
+
+        # Convert valid face encodings to numpy arrays for comparison
+        student_face_encodings_np = [decode_padded_base64(s.face_encoding) for s in students if s.face_encoding]
+        student_face_encodings_np = [enc for enc in student_face_encodings_np if len(enc) == 128]  # Ensure all encodings have the same shape
 
         print("Debug: Number of students:", len(students))
-        print("Debug: Decoded student face encodings:", student_face_encodings)
+        print("Debug: Decoded student face encodings:", student_face_encodings_np)
 
-        matches = face_recognition.compare_faces(student_face_encodings, student_face_encoding)
+        matches = face_recognition.compare_faces(student_face_encodings_np, student_face_encoding)
         print("Debug: Matches:", matches)
         
         if True in matches:

@@ -16,6 +16,8 @@ import base64
 def user_login(request):
     username = request.data.get('username')
     password = request.data.get('password')
+    print(password)
+    print(username)
 
     user = authenticate(username=username, password=password)
     if user:
